@@ -51,7 +51,9 @@ if prompt := st.chat_input("Hangi konuda bilgi almak istersiniz?"):
 
             # 2. OpenAI ile Cevap Oluştur (Augmentation)
             messages = [
-                {"role": "system", "content": "Sen profesyonel bir hukuk asistanısın. Sadece sana verilen dökümanlara dayanarak cevap ver. Eğer bilgi dökümanlarda yoksa bilmediğini söyle."},
+                {"role": "system", "content": "Sen profesyonel bir hukuk asistanısın.
+                1.Sadece sana verilen dökümanlara dayanarak cevap ver. Eğer bilgi dökümanlarda yoksa bilmediğini söyle.
+                2) Hukukcu olmayanlarin da anlayacagi bir dil kullan."},
                 {"role": "user", "content": f"Soru: {prompt}\n\nDökümanlar:\n{context}"}
             ]
             
@@ -70,3 +72,4 @@ if prompt := st.chat_input("Hangi konuda bilgi almak istersiniz?"):
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 client.close()
+
