@@ -36,6 +36,23 @@ def get_weaviate_client():
     )
 
 client = get_weaviate_client()
+# Bu kısmı 'client = get_weaviate_client()' satırının hemen altına ekle
+def create_feedback_collection_if_not_exists():
+    try:
+        # Koleksiyon var mı kontrol et
+        client.collections.get("Feedback")
+    except:
+        # Yoksa oluştur
+        client.collections.create(
+            name="Feedback",
+            properties=[
+                wvc.config.Property(name="question", data_type=wvc.config.DataType.TEXT),
+                wvc.config.Property(name="answer", data_type=wvc.config.DataType.TEXT),
+                wvc.config.Property(name="is_correct", data_type=wvc.config.DataType.TEXT),
+            ]
+        )
+
+create_feedback_collection_if_not_exists()
 
 # --- FEEDBACK FONKSİYONU ---
 def save_feedback(q, r, score):
@@ -124,3 +141,4 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
                     save_feedback(prompt, full_response, "YANLIŞ")
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
+
