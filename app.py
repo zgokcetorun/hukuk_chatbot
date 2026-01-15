@@ -2,70 +2,75 @@ import streamlit as st
 import weaviate
 import weaviate.classes as wvc
 from openai import OpenAI
-import time
 
-# --- SAYFA AYARLARI ---
+# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Hukuk AI | Profesyonel Panel", 
-    page_icon="⚖️", 
+    page_title="Hukuk AI | Profesyonel Mevzuat Paneli",
+    page_icon="⚖️",
     layout="wide"
 )
 
-# --- GRİ VE LACİVERT TEMA (CUSTOM CSS) ---
+# --- 2. PROFESSIONAL NAVY & GREY THEME ---
+# Using a cleaner approach to avoid the markdown syntax error
 st.markdown("""
     <style>
-    /* Ana Arkaplan */
+    /* Main Background: Light Grey */
     .stApp {
-        background-color: #F5F5F5; /* Açık Gri */
+        background-color: #F5F5F5;
     }
     
-    /* Yan Menü (Sidebar) */
+    /* Sidebar: Navy Blue */
     [data-testid="stSidebar"] {
-        background-color: #1B263B; /* Koyu Lacivert */
-        color: white;
+        background-color: #1B263B !important;
     }
     
-    /* Sidebar Metinleri */
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] h3 {
+    /* Sidebar Text: Light Grey for readability */
+    [data-testid="stSidebar"] .stMarkdown p, 
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3 {
         color: #E0E0E0 !important;
     }
 
-    /* Chat Mesaj Kutuları */
-    .stChatMessage {
-        border-radius: 12px;
-        border: 1px solid #D1D5DB;
-    }
-    
-    /* Asistan Mesajı (Lacivert Tonlu) */
-    [data-testid="stChatMessage"]:nth-child(even) {
-        background-color: #E2E8F0; /* Hafif Mavi-Gri */
-        border-left: 5px solid #1B263B; /* Lacivert vurgu */
-    }
-
-    /* Başlık ve Butonlar */
+    /* Titles */
     h1 {
         color: #1B263B;
-        font-family: 'Georgia', serif;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 700;
+    }
+
+    /* Assistant Chat Bubble: Blue-Grey tint */
+    [data-testid="stChatMessage"]:nth-child(even) {
+        background-color: #E2E8F0 !important;
+        border-left: 5px solid #1B263B !important;
+        border-radius: 10px;
     }
     
+    /* User Chat Bubble: Clean White */
+    [data-testid="stChatMessage"]:nth-child(odd) {
+        background-color: #FFFFFF !important;
+        border: 1px solid #D1D5DB;
+        border-radius: 10px;
+    }
+
+    /* Buttons */
     .stButton>button {
         background-color: #1B263B;
         color: white;
-        border-radius: 8px;
-        border: none;
-    }
-    
-    .stButton>button:hover {
-        background-color: #415A77;
-        color: white;
+        border-radius: 5px;
     }
     </style>
     """, unsafe_allow_stdio=True)
 
-# --- CREDENTIALS & CLIENTS ---
-W_URL = st.secrets["WEAVIATE_URL"]
-W_API = st.secrets["WEAVIATE_API_KEY"]
-O_API = st.secrets["OPENAI_API_KEY"]
+# --- 3. CONNECTION SETUP ---
+# Ensure these keys are set in your Streamlit Secrets or Environment Variables
+try:
+    W_URL = st.secrets["WEAVIATE_URL"]
+    W_API = st.secrets["WEAVIATE_API_KEY"]
+    O_API = st.secrets["OPENAI_API_KEY"]
+except KeyError as e:
+    st.error(f"Secret Key Eksik: {e}. Lütfen .streamlit/secrets.toml dosyasını kontrol edin.")
+    st.stop()
 
 ai_client = OpenAI(api_key=O_API)
 
@@ -79,94 +84,110 @@ def get_weaviate_client():
 
 client = get_weaviate_client()
 
-# --- SIDEBAR ---
+# --- 4. SIDEBAR & NAVIGATION ---
 with st.sidebar:
-    st.markdown("### ⚖️ Hukuk Asistanı v2.0")
-    st.write("Profesyonel Mevzuat Tarama Sistemi")
+    st.markdown("## ⚖️ Hukuk Kontrol Paneli")
     st.divider()
     
-    # Durum Göstergesi
-    st.caption("SİSTEM DURUMU")
-    st.success("Veritabanı Aktif" if client.is_ready() else "Bağlantı Kesildi")
+    # Connection Status
+    if client.is_ready():
+        st.success("Sistem Çevrimiçi")
+    else:
+        st.error("Veritabanı Bağlantısı Yok")
     
     st.divider()
-    
-    # Sohbeti İndir Özelliği
+    st.info("Bu sistem, yüklenen hukuk dökümanları üzerinden 'Hybrid Search' yaparak analiz üretir.")
+
+    # Export Chat Feature
     if "messages" in st.session_state and len(st.session_state.messages) > 0:
-        chat_text = ""
+        chat_history = ""
         for m in st.session_state.messages:
-            chat_text += f"{m['role'].upper()}: {m['content']}\n\n"
+            chat_history += f"{m['role'].upper()}: {m['content']}\n\n"
         
         st.download_button(
-            label="📄 Sohbeti TXT Olarak İndir",
-            data=chat_text,
-            file_name="hukuk_danismanlik_notlari.txt",
+            label="📄 Sohbeti Rapor Olarak İndir",
+            data=chat_history,
+            file_name="hukuk_analiz_raporu.txt",
             mime="text/plain",
             use_container_width=True
         )
 
-    if st.button("Sohbeti Sıfırla", use_container_width=True):
+    if st.button("Sohbet Geçmişini Sil", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# --- ANA EKRAN ---
-st.title("⚖️ Mevzuat ve Döküman Analizi")
+# --- 5. CHAT INTERFACE ---
+st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mesaj Geçmişi
+# Show previous messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Kullanıcı Girişi
-if prompt := st.chat_input("Hukuki dökümanlarda ara..."):
+# User Input Logic
+if prompt := st.chat_input("Sorunuzu buraya yazın (Örn: İş kanunu tazminat süreleri...)"):
+    # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Generate Response
     with st.chat_message("assistant"):
         response_placeholder = st.empty()
         full_response = ""
         
-        with st.spinner("İlgili maddeler taranıyor..."):
-            # 1. VERİ GETİRME
+        with st.spinner("İlgili mevzuat taranıyor..."):
+            # A. VECTOR RETRIEVAL (The "Brain")
             collection = client.collections.get("HukukDoc")
-            response = collection.query.hybrid(query=prompt, limit=5, alpha=0.5)
+            search_results = collection.query.hybrid(
+                query=prompt, 
+                limit=4, 
+                alpha=0.5 # Balance between vector (meaning) and keyword matching
+            )
             
             context = ""
-            sources = []
-            for obj in response.objects:
-                info = f"{obj.properties['filename']} (S. {obj.properties['page_number']})"
-                sources.append(info)
-                context += f"\n--- {info} ---\n{obj.properties['content']}\n"
+            source_list = []
+            for obj in search_results.objects:
+                s_meta = f"{obj.properties['filename']} (Sayfa {obj.properties['page_number']})"
+                source_list.append(s_meta)
+                context += f"\n--- KAYNAK: {s_meta} ---\n{obj.properties['content']}\n"
 
-            # 2. PROMPT
+            # B. SYSTEM PROMPT
             messages = [
-                {"role": "system", "content": "Sen kıdemli bir avukatsın. Gri ve ağırbaşlı bir üslup kullan. Sadece sağlanan bağlamı kullan."},
-                {"role": "user", "content": f"Dökümanlar:\n{context}\n\nSoru: {prompt}"}
+                {
+                    "role": "system", 
+                    "content": "Sen kıdemli bir avukat ve hukuk müşavirisin. "
+                               "Sana verilen döküman parçalarını kullanarak profesyonel, "
+                               "mantıklı ve kesin cevaplar ver. "
+                               "Cevaplarında önemli maddeleri **kalın** yaz ve liste kullan. "
+                               "Dökümanda olmayan bilgiyi uydurma."
+                },
+                {"role": "user", "content": f"Bağlam:\n{context}\n\nSoru: {prompt}"}
             ]
 
-            # 3. STREAMING (Akışkan Yanıt)
+            # C. STREAMING RESPONSE
             stream = ai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
-                temperature=0.2,
+                temperature=0.3,
                 stream=True
             )
             
             for chunk in stream:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     full_response += chunk.choices[0].delta.content
                     response_placeholder.markdown(full_response + "▌")
             
             response_placeholder.markdown(full_response)
 
-            # 4. REFERANSLAR (LACİVERT KART)
-            if sources:
-                with st.expander("🔍 İncelenen Kaynak Maddeler"):
-                    for s in set(sources):
-                        st.markdown(f"**• {s}**")
+            # D. SOURCE CITATIONS
+            if source_list:
+                with st.expander("📍 Kullanılan Referanslar"):
+                    for s in sorted(list(set(source_list))):
+                        st.markdown(f"• {s}")
 
+    # Add to session state
     st.session_state.messages.append({"role": "assistant", "content": full_response})
