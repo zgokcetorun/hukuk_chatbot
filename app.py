@@ -3,28 +3,28 @@ import weaviate
 import weaviate.classes as wvc
 from openai import OpenAI
 
-# --- 1. PAGE CONFIGURATION ---
+# --- 1. SAYFA AYARLARI ---
 st.set_page_config(
-    page_title="Hukuk AI | Profesyonel Mevzuat Paneli",
+    page_title="Hukuk AI | Mevzuat Paneli",
     page_icon="⚖️",
     layout="wide"
 )
 
-# --- 2. PROFESSIONAL NAVY & GREY THEME ---
-# Using a cleaner approach to avoid the markdown syntax error
+# --- 2. PROFESYONEL TEMA (GRİ & LACİVERT) ---
+# Hata almamak için CSS bloğunu dikkatlice yapılandırdık
 st.markdown("""
     <style>
-    /* Main Background: Light Grey */
+    /* Ana Arkaplan: Açık Gri */
     .stApp {
-        background-color: #F5F5F5;
+        background-color: #F8F9FA;
     }
     
-    /* Sidebar: Navy Blue */
+    /* Yan Menü: Koyu Lacivert */
     [data-testid="stSidebar"] {
         background-color: #1B263B !important;
     }
     
-    /* Sidebar Text: Light Grey for readability */
+    /* Yan Menü Yazıları: Beyaz/Gri */
     [data-testid="stSidebar"] .stMarkdown p, 
     [data-testid="stSidebar"] h1, 
     [data-testid="stSidebar"] h2, 
@@ -32,44 +32,34 @@ st.markdown("""
         color: #E0E0E0 !important;
     }
 
-    /* Titles */
+    /* Başlıklar */
     h1 {
         color: #1B263B;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-weight: 700;
+        font-family: 'Helvetica', sans-serif;
     }
 
-    /* Assistant Chat Bubble: Blue-Grey tint */
+    /* Asistan Mesaj Kutusu: Mavi-Gri tonu */
     [data-testid="stChatMessage"]:nth-child(even) {
         background-color: #E2E8F0 !important;
         border-left: 5px solid #1B263B !important;
-        border-radius: 10px;
     }
     
-    /* User Chat Bubble: Clean White */
+    /* Kullanıcı Mesaj Kutusu: Beyaz */
     [data-testid="stChatMessage"]:nth-child(odd) {
         background-color: #FFFFFF !important;
         border: 1px solid #D1D5DB;
-        border-radius: 10px;
-    }
-
-    /* Buttons */
-    .stButton>button {
-        background-color: #1B263B;
-        color: white;
-        border-radius: 5px;
     }
     </style>
     """, unsafe_allow_stdio=True)
 
-# --- 3. CONNECTION SETUP ---
-# Ensure these keys are set in your Streamlit Secrets or Environment Variables
+# --- 3. BAĞLANTI AYARLARI ---
+# Secrets kontrolü
 try:
     W_URL = st.secrets["WEAVIATE_URL"]
     W_API = st.secrets["WEAVIATE_API_KEY"]
     O_API = st.secrets["OPENAI_API_KEY"]
 except KeyError as e:
-    st.error(f"Secret Key Eksik: {e}. Lütfen .streamlit/secrets.toml dosyasını kontrol edin.")
+    st.error(f"Eksik Anahtar: {e}. Lütfen Streamlit Dashboard üzerinden Secrets ayarlarını yapın.")
     st.stop()
 
 ai_client = OpenAI(api_key=O_API)
@@ -84,91 +74,75 @@ def get_weaviate_client():
 
 client = get_weaviate_client()
 
-# --- 4. SIDEBAR & NAVIGATION ---
+# --- 4. YAN PANEL (SIDEBAR) ---
 with st.sidebar:
     st.markdown("## ⚖️ Hukuk Kontrol Paneli")
     st.divider()
     
-    # Connection Status
     if client.is_ready():
         st.success("Sistem Çevrimiçi")
     else:
-        st.error("Veritabanı Bağlantısı Yok")
+        st.error("Bağlantı Hatası")
     
     st.divider()
-    st.info("Bu sistem, yüklenen hukuk dökümanları üzerinden 'Hybrid Search' yaparak analiz üretir.")
-
-    # Export Chat Feature
+    
+    # Sohbeti Dışa Aktar
     if "messages" in st.session_state and len(st.session_state.messages) > 0:
-        chat_history = ""
+        chat_text = ""
         for m in st.session_state.messages:
-            chat_history += f"{m['role'].upper()}: {m['content']}\n\n"
+            chat_text += f"{m['role'].upper()}: {m['content']}\n\n"
         
         st.download_button(
-            label="📄 Sohbeti Rapor Olarak İndir",
-            data=chat_history,
-            file_name="hukuk_analiz_raporu.txt",
+            label="📄 Sohbeti TXT Olarak İndir",
+            data=chat_text,
+            file_name="hukuk_analiz.txt",
             mime="text/plain",
             use_container_width=True
         )
 
-    if st.button("Sohbet Geçmişini Sil", use_container_width=True):
+    if st.button("Geçmişi Temizle", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# --- 5. CHAT INTERFACE ---
+# --- 5. SOHBET ARAYÜZÜ ---
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Show previous messages
+# Mesajları Ekrana Bas
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User Input Logic
-if prompt := st.chat_input("Sorunuzu buraya yazın (Örn: İş kanunu tazminat süreleri...)"):
-    # Add user message
+# Soru Girişi
+if prompt := st.chat_input("Hukuki sorunuzu buraya yazın..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate Response
     with st.chat_message("assistant"):
         response_placeholder = st.empty()
         full_response = ""
         
-        with st.spinner("İlgili mevzuat taranıyor..."):
-            # A. VECTOR RETRIEVAL (The "Brain")
+        with st.spinner("Dökümanlar taranıyor..."):
+            # A. HİBRİT ARAMA (Anlamsal + Kelime Bazlı)
             collection = client.collections.get("HukukDoc")
-            search_results = collection.query.hybrid(
-                query=prompt, 
-                limit=4, 
-                alpha=0.5 # Balance between vector (meaning) and keyword matching
-            )
+            results = collection.query.hybrid(query=prompt, limit=4, alpha=0.5)
             
             context = ""
-            source_list = []
-            for obj in search_results.objects:
-                s_meta = f"{obj.properties['filename']} (Sayfa {obj.properties['page_number']})"
-                source_list.append(s_meta)
-                context += f"\n--- KAYNAK: {s_meta} ---\n{obj.properties['content']}\n"
+            sources = []
+            for obj in results.objects:
+                meta = f"{obj.properties['filename']} (S. {obj.properties['page_number']})"
+                sources.append(meta)
+                context += f"\n[KAYNAK: {meta}]\n{obj.properties['content']}\n"
 
-            # B. SYSTEM PROMPT
+            # B. AI YANIT ÜRETİMİ (STREAMING)
             messages = [
-                {
-                    "role": "system", 
-                    "content": "Sen kıdemli bir avukat ve hukuk müşavirisin. "
-                               "Sana verilen döküman parçalarını kullanarak profesyonel, "
-                               "mantıklı ve kesin cevaplar ver. "
-                               "Cevaplarında önemli maddeleri **kalın** yaz ve liste kullan. "
-                               "Dökümanda olmayan bilgiyi uydurma."
-                },
+                {"role": "system", "content": "Sen kıdemli bir hukuk müşavirisin. Sadece verilen dökümanlara dayanarak profesyonelce cevap ver. Maddeler kullan."},
                 {"role": "user", "content": f"Bağlam:\n{context}\n\nSoru: {prompt}"}
             ]
 
-            # C. STREAMING RESPONSE
             stream = ai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
@@ -177,17 +151,16 @@ if prompt := st.chat_input("Sorunuzu buraya yazın (Örn: İş kanunu tazminat s
             )
             
             for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
+                if chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     response_placeholder.markdown(full_response + "▌")
             
             response_placeholder.markdown(full_response)
 
-            # D. SOURCE CITATIONS
-            if source_list:
-                with st.expander("📍 Kullanılan Referanslar"):
-                    for s in sorted(list(set(source_list))):
-                        st.markdown(f"• {s}")
+            # C. KAYNAK GÖSTERİMİ
+            if sources:
+                with st.expander("📍 Referans Alınan Kaynaklar"):
+                    for s in set(sources):
+                        st.write(f"- {s}")
 
-    # Add to session state
     st.session_state.messages.append({"role": "assistant", "content": full_response})
