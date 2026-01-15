@@ -6,7 +6,7 @@ from openai import OpenAI
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Hukuk Asistanı", page_icon="⚖️", layout="wide")
 
-# --- CUSTOM CSS (Lacivert & Gray Theme) ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
         .stApp { background-color: #f8f9fa; }
@@ -16,7 +16,6 @@ st.markdown("""
         [data-testid="stSidebar"] * { color: white !important; }
         .stButton>button { background-color: #002366; color: white; border-radius: 5px; border: none; width: 100%; }
         .stButton>button:hover { background-color: #4a4a4a; color: white; }
-        .streamlit-expanderHeader { background-color: #e9ecef; border-radius: 5px; color: #002366 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -36,47 +35,42 @@ def get_weaviate_client():
     )
 
 client = get_weaviate_client()
-# Bu kısmı 'client = get_weaviate_client()' satırının hemen altına ekle
-def create_feedback_collection_if_not_exists():
-    try:
-        # Koleksiyon var mı kontrol et
-        client.collections.get("Feedback")
-    except:
-        # Yoksa oluştur
-        client.collections.create(
-            name="Feedback",
-            properties=[
-                wvc.config.Property(name="question", data_type=wvc.config.DataType.TEXT),
-                wvc.config.Property(name="answer", data_type=wvc.config.DataType.TEXT),
-                wvc.config.Property(name="is_correct", data_type=wvc.config.DataType.TEXT),
-            ]
-        )
 
-create_feedback_collection_if_not_exists()
+# --- KOLEKSİYON KONTROL (GELİŞTİRİLMİŞ) ---
+def init_feedback_collection():
+    try:
+        if not client.collections.exists("Feedback"):
+            client.collections.create(
+                name="Feedback",
+                vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_openai(), # Vektörleştirici eklendi
+                properties=[
+                    wvc.config.Property(name="question", data_type=wvc.config.DataType.TEXT),
+                    wvc.config.Property(name="answer", data_type=wvc.config.DataType.TEXT),
+                    wvc.config.Property(name="is_correct", data_type=wvc.config.DataType.TEXT),
+                ]
+            )
+            return "Koleksiyon Yeni Oluşturuldu"
+        return "Koleksiyon Zaten Var"
+    except Exception as e:
+        return f"Hata: {str(e)}"
+
+# Uygulama başlar başlamaz çalıştır
+status = init_feedback_collection()
 
 # --- FEEDBACK FONKSİYONU ---
 def save_feedback(q, r, score):
     try:
         f_col = client.collections.get("Feedback")
         f_col.data.insert({"question": q, "answer": r, "is_correct": score})
-        st.toast("Geri bildiriminiz kaydedildi!", icon="✅")
-    except:
-        # Koleksiyon yoksa oluştur
-        client.collections.create(
-            name="Feedback",
-            properties=[
-                wvc.config.Property(name="question", data_type=wvc.config.DataType.TEXT),
-                wvc.config.Property(name="answer", data_type=wvc.config.DataType.TEXT),
-                wvc.config.Property(name="is_correct", data_type=wvc.config.DataType.TEXT),
-            ]
-        )
-        save_feedback(q, r, score)
+        st.toast(f"Kaydedildi: {score}", icon="✅")
+    except Exception as e:
+        st.error(f"Kayıt Hatası: {e}")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.image("https://img.icons8.com/ios-filled/100/ffffff/scales.png", width=80)
     st.markdown("### Dijital Hukuk Ofisi")
-    st.info("Hukuki döküman analiz sistemi.")
+    st.info(f"Sistem Durumu: {status}")
     
     st.divider()
     with st.expander("🔐 Admin Paneli"):
@@ -84,16 +78,18 @@ with st.sidebar:
             try:
                 f_col = client.collections.get("Feedback")
                 results = f_col.query.fetch_objects(limit=50).objects
+                if not results:
+                    st.write("Henüz kayıt yok.")
                 for res in results:
-                    st.caption(f"Q: {res.properties['question'][:30]}...")
-                    st.write(f"Sonuç: {res.properties['is_correct']}")
+                    st.write(f"**Soru:** {res.properties.get('question', '')[:50]}...")
+                    st.write(f"**Sonuç:** {res.properties.get('is_correct', '')}")
                     st.divider()
-            except:
-                st.write("Henüz geri bildirim yok.")
+            except Exception as e:
+                st.write("Veriler okunamadı.")
 
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
-# --- CHAT ARAYÜZÜ ---
+# --- CHAT MANTIĞI ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -107,7 +103,8 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Dökümanlar inceleniyor..."):
+        with st.spinner("İnceleniyor..."):
+            # 1. Arama
             collection = client.collections.get("HukukDoc")
             response = collection.query.hybrid(query=prompt, limit=4, alpha=0.5)
             
@@ -118,27 +115,27 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
                 sources.append(s_info)
                 context += f"\n[KAYNAK: {s_info}]\n{obj.properties['content']}\n"
 
+            # 2. Yanıt Üretme
             messages = [
-                {"role": "system", "content": "Sen kıdemli bir hukuk müşavirisin. Önemli yerleri kalın yaz. Kaynak atfı yap."},
+                {"role": "system", "content": "Sen kıdemli bir hukuk müşavirisin. Önemli yerleri kalın yaz."},
                 {"role": "user", "content": f"Bağlam:\n{context}\n\nSoru: {prompt}"}
             ]
-            
             ai_res = ai_client.chat.completions.create(model="gpt-4o", messages=messages, temperature=0.4)
             full_response = ai_res.choices[0].message.content
-            
             st.markdown(full_response)
             
+            # 3. Kaynaklar
             with st.expander("📍 Kaynaklar"):
                 for s in set(sources): st.write(f"- {s}")
 
-            # Geri Bildirim Butonları
-            col_1, col_2 = st.columns([0.2, 0.8])
-            with col_1:
-                if st.button("👍 Faydalı", key=f"p_{len(st.session_state.messages)}"):
+            # 4. Geri Bildirim Butonları
+            st.write("---")
+            c1, c2 = st.columns([0.2, 0.2])
+            with c1:
+                if st.button("👍 Doğru", key=f"p_{len(st.session_state.messages)}"):
                     save_feedback(prompt, full_response, "DOĞRU")
-            with col_2:
-                if st.button("👎 Hatalı", key=f"n_{len(st.session_state.messages)}"):
+            with c2:
+                if st.button("👎 Yanlış", key=f"n_{len(st.session_state.messages)}"):
                     save_feedback(prompt, full_response, "YANLIŞ")
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
-
