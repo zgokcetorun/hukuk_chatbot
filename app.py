@@ -1,29 +1,21 @@
 import streamlit as st
 import weaviate
 import weaviate.classes as wvc
-from openai import OpenAI
+from openai import OpenAI # Yeni versiyon kullanımı
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Hukuk Asistanı", page_icon="⚖️", layout="wide")
-
-# --- CUSTOM CSS ---
-st.markdown("""
-    <style>
-        .stApp { background-color: #f8f9fa; }
-        h1 { color: #002366; font-family: 'Segoe UI', sans-serif; font-weight: 700; }
-        [data-testid="stSidebar"] { background-color: #002366; }
-        [data-testid="stSidebar"] * { color: white !important; }
-        .stButton>button { background-color: #002366; color: white; border-radius: 5px; }
-    </style>
-    """, unsafe_allow_html=True)
+st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
 # --- BAĞLANTI ---
 W_URL = st.secrets["WEAVIATE_URL"]
 W_API = st.secrets["WEAVIATE_API_KEY"]
 O_API = st.secrets["OPENAI_API_KEY"]
 
+# OpenAI istemcisini başlat
 ai_client = OpenAI(api_key=O_API)
 
+# Weaviate bağlantısını cache'leyelim (Performans için)
 @st.cache_resource
 def get_weaviate_client():
     return weaviate.connect_to_weaviate_cloud(
@@ -34,85 +26,76 @@ def get_weaviate_client():
 
 client = get_weaviate_client()
 
-# --- WEAVIATE FEEDBACK TABLOSUNU HAZIRLA ---
-def ensure_feedback_table():
-    if not client.collections.exists("Feedback"):
-        client.collections.create(
-            name="Feedback",
-            # Analiz yapacağın için vektörleştiriciyi açık bırakıyoruz
-            vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_openai(),
-            properties=[
-                wvc.config.Property(name="question", data_type=wvc.config.DataType.TEXT),
-                wvc.config.Property(name="answer", data_type=wvc.config.DataType.TEXT),
-                wvc.config.Property(name="rating", data_type=wvc.config.DataType.TEXT),
-            ]
-        )
-
-ensure_feedback_table()
-
-# --- VERİYİ WEAVIATE'E GÖNDER ---
-def send_to_weaviate(q, a, r):
-    try:
-        f_col = client.collections.get("Feedback")
-        f_col.data.insert({
-            "question": q,
-            "answer": a,
-            "rating": r
-        })
-        st.toast(f"Veri Weaviate'e iletildi: {r}", icon="🚀")
-    except Exception as e:
-        st.error(f"Weaviate kayıt hatası: {e}")
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.image("https://img.icons8.com/ios-filled/100/ffffff/scales.png", width=60)
-    st.markdown("### Hukuk Veri Analitiği")
-    st.caption("Geri bildirimler doğrudan Weaviate Feedback koleksiyonuna yazılır.")
-
-st.title("⚖️ Profesyonel Hukuk Danışmanı")
-
-# --- CHAT SİSTEMİ ---
+# --- CHAT ARAYÜZÜ ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# Mesaj geçmişini göster
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-if prompt := st.chat_input("Sorunuzu buraya yazın..."):
+if prompt := st.chat_input("Sorunuzu buraya yazın (Örn: Kira artış oranı nedir?)"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analiz ediliyor..."):
-            # 1. Hukuk dökümanlarında ara
-            hukuk_col = client.collections.get("HukukDoc")
-            res = hukuk_col.query.hybrid(query=prompt, limit=3)
+        with st.spinner("Hukuki dökümanlar taranıyor ve analiz ediliyor..."):
             
-            context = "\n".join([o.properties['content'] for o in res.objects])
-            
-            # 2. Cevap üret
-            ai_res = ai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": f"Bağlam:\n{context}\nSoru: {prompt}"}]
+            # 1. HİBRİT ARAMA (Vektör + Keyword)
+            # Bu yöntem çok daha spesifik sonuçlar getirir
+            collection = client.collections.get("HukukDoc")
+            response = collection.query.hybrid(
+                query=prompt,
+                limit=4, # 4 parça daha iyi bağlam sağlar
+                alpha=0.5 # 0.5 hem anlama hem kelime eşleşmesine bakar
             )
-            ans = ai_res.choices[0].message.content
-            st.markdown(ans)
             
-            # 3. Analiz İçin Feedback Butonları (Form içinde)
-            st.write("---")
-            with st.form(key=f"analiz_formu_{len(st.session_state.messages)}"):
-                st.caption("Bu etkileşimi Weaviate'e analiz için kaydet:")
-                c1, c2 = st.columns(2)
-                with c1:
-                    ok = st.form_submit_button("✅ Başarılı")
-                with c2:
-                    fail = st.form_submit_button("❌ Hatalı")
-                
-                if ok:
-                    send_to_weaviate(prompt, ans, "POSITIVE")
-                if fail:
-                    send_to_weaviate(prompt, ans, "NEGATIVE")
+            context = ""
+            sources = []
+            for obj in response.objects:
+                source_info = f"{obj.properties['filename']} (S. {obj.properties['page_number']})"
+                sources.append(source_info)
+                context += f"\n[KAYNAK: {source_info}]\n{obj.properties['content']}\n"
 
-    st.session_state.messages.append({"role": "assistant", "content": ans})
+            # 2. GELİŞMİŞ SİSTEM PROMPTU (Botun karakterini burada belirliyoruz)
+            system_instruction = """Sen kıdemli bir hukuk müşavirisin. 
+            Görevin, aşağıdaki döküman parçalarını kullanarak kullanıcının sorusuna net, profesyonel ve yardımcı bir cevap oluşturmaktır.
+            
+            KURALLAR:
+            1. Cevapların 'robotik' olmasın. Bir avukat gibi akıcı ve mantıklı bir kurguyla anlat.
+            2. Eğer dökümanlarda cevap varsa, genel konuşma; spesifik madde veya kuralları belirt.
+            3. Dökümanlarda bilgi yoksa 'Veritabanımda bu konuda net bir bilgi bulunmuyor' de ve yanlış bilgi uydurma.
+            4. Cevabını verirken önemli kısımları kalın harflerle belirt.
+            5. Cevabın sonunda varsa mutlaka ilgili kanun maddesine veya dokümana atıf yap."""
+
+            # 3. CHAT GEÇMİŞİNİ DAHİL ET (Memory)
+            # Son 3 mesajı alarak bağlamı koruyoruz
+            history = st.session_state.messages[-3:]
+            
+            messages = [{"role": "system", "content": system_instruction}]
+            for m in history:
+                messages.append({"role": m["role"], "content": m["content"]})
+            
+            # Güncel soruyu context ile besle
+            messages.append({"role": "user", "content": f"Bağlam Dökümanları:\n{context}\n\nSoru: {prompt}"})
+            
+            # 4. CEVAP ÜRETİMİ
+            ai_response = ai_client.chat.completions.create(
+                model="gpt-4o", # Daha zeki cevaplar için 4o şart
+                messages=messages,
+                temperature=0.4 # Daha tutarlı ve ciddi cevaplar için düşürdük
+            )
+            
+            full_response = ai_response.choices[0].message.content
+            st.markdown(full_response)
+            
+            # Kaynakları şık bir şekilde göster
+            with st.expander("📍 Kullanılan Referanslar"):
+                for s in set(sources):
+                    st.write(f"- {s}")
+
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+# Sayfa kapandığında bağlantıyı kapatma (Streamlit'te opsiyoneldir)
