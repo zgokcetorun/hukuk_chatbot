@@ -52,24 +52,25 @@ st.markdown("""
             color: white;
         }
         
-        /* Sidebar butonları - ÇOK BELİRGİN */
+        /* Sidebar butonları - ÇOK BELİRGİN PARLAK RENKLER */
         div[data-testid="stSidebar"] button[kind="secondary"] {
-            background-color: white !important;
-            color: #002366 !important;
-            border: 4px solid white !important;
-            border-radius: 10px !important;
+            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%) !important;
+            color: white !important;
+            border: 4px solid #FFFFFF !important;
+            border-radius: 12px !important;
             font-weight: 900 !important;
-            font-size: 16px !important;
-            padding: 15px !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
+            font-size: 17px !important;
+            padding: 18px !important;
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4) !important;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
         }
         
         div[data-testid="stSidebar"] button[kind="secondary"]:hover {
-            background-color: #FFD700 !important;
-            color: #002366 !important;
-            border: 4px solid #FFD700 !important;
-            transform: scale(1.05) !important;
-            box-shadow: 0 6px 12px rgba(0,0,0,0.4) !important;
+            background: linear-gradient(135deg, #00D4FF 0%, #0099FF 100%) !important;
+            color: white !important;
+            border: 4px solid #00D4FF !important;
+            transform: scale(1.08) !important;
+            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.6) !important;
         }
 
         /* Expander (Referanslar) */
