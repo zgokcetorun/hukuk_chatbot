@@ -2,6 +2,8 @@ import streamlit as st
 import weaviate
 import weaviate.classes as wvc
 from openai import OpenAI
+from concurrent.futures import ThreadPoolExecutor
+import json
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Hukuk Asistanı", page_icon="⚖️", layout="wide")
@@ -75,13 +77,13 @@ COLLECTION_MAP = {
     "kira_hukuku": {
         "collection": "HukukDoc",
         "name": "Kira Hukuku",
-        "description": "Kira sözleşmeleri, kiracı-kiraya veren ilişkileri, tahliye, kira artışı, kiralama hukuku",
+        "keywords": ["kira", "kiracı", "kiraya veren", "tahliye", "kira bedeli", "kiralama", "kira sözleşmesi", "kira artışı", "depozito", "ev sahibi"],
         "emoji": "🏠"
     },
     "is_hukuku": {
         "collection": "IsDavalari",
         "name": "İş Hukuku",
-        "description": "İş sözleşmeleri, işçi-işveren ilişkileri, işten çıkarma, kıdem tazminatı, fazla mesai, çalışma hakları",
+        "keywords": ["işçi", "işveren", "iş sözleşmesi", "işten çıkarma", "kıdem", "fazla mesai", "iş akdi", "çalışan", "istifa", "tazminat", "işe iade", "patron", "kovdu", "işsiz"],
         "emoji": "💼"
     }
 }
@@ -98,24 +100,9 @@ with st.sidebar:
     st.markdown("#### 📚 Mevcut Kategoriler")
     for key, info in COLLECTION_MAP.items():
         st.markdown(f"{info['emoji']} **{info['name']}**")
-        st.caption(info['description'])
     
     st.divider()
-    
-    # Manuel kategori seçimi (opsiyonel)
-    st.markdown("#### ⚙️ Arama Ayarları")
-    manual_mode = st.toggle("Manuel Kategori Seçimi", value=False)
-    
-    if manual_mode:
-        selected_category = st.selectbox(
-            "Kategori Seçin",
-            options=["Otomatik"] + [info["name"] for info in COLLECTION_MAP.values()]
-        )
-    else:
-        selected_category = "Otomatik"
-    
-    st.divider()
-    st.caption("Versiyon: 2.0 (LLM Routing)")
+    st.caption("Versiyon: 3.0 (Ultra Fast - Single LLM)")
 
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
@@ -136,107 +123,125 @@ def get_weaviate_client():
 
 client = get_weaviate_client()
 
-# --- LLM İLE AKILLI ROUTİNG ---
-def classify_query_with_llm(query):
-    """LLM ile soruyu kategorize et"""
+# --- HIZLI KEYWORD ROUTİNG ---
+def classify_query_fast(query):
+    """Keyword tabanlı hızlı routing"""
+    query_lower = query.lower()
+    
+    scores = {}
+    for key, info in COLLECTION_MAP.items():
+        score = sum(1 for keyword in info["keywords"] if keyword in query_lower)
+        scores[key] = score
+    
+    # En yüksek skoru bul
+    if max(scores.values()) > 0:
+        return max(scores, key=scores.get)
+    
+    return None
+
+# --- PARALEL ARAMA ---
+def search_single_collection(collection_name, query, limit):
+    """Tek collection'da ara"""
     try:
-        # Kategorileri LLM'e açıkla
-        category_options = "\n".join([
-            f"- {key}: {info['description']}"
-            for key, info in COLLECTION_MAP.items()
-        ])
-        
-        response = ai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Hızlı ve ucuz
-            messages=[{
-                "role": "system",
-                "content": f"""Sen bir hukuk sorusu sınıflandırma uzmanısın.
-
-Kullanıcının sorusunu analiz et ve hangi hukuk kategorisine ait olduğunu belirle.
-
-MEVCUT KATEGORİLER:
-{category_options}
-
-KURALLAR:
-1. Soruyu dikkatlice oku ve hangi kategoriye ait olduğunu anla
-2. Sadece kategori anahtarını döndür (örn: kira_hukuku veya is_hukuku)
-3. Birden fazla kategoriye uyuyorsa, en alakalı olanı seç
-4. Hiçbir kategoriye uymuyorsa "belirsiz" yaz
-5. Başka hiçbir açıklama ekleme, sadece kategori adını yaz"""
-            }, {
-                "role": "user",
-                "content": f"Soru: {query}\n\nBu soru hangi kategoriye ait?"
-            }],
-            temperature=0,
-            max_tokens=20
-        )
-        
-        detected = response.choices[0].message.content.strip().lower()
-        
-        # Geçerli kategori mi kontrol et
-        if detected in COLLECTION_MAP.keys():
-            return detected
-        
-        return None
-        
-    except Exception as e:
-        st.error(f"❌ Kategori tespiti hatası: {e}")
-        return None
-
-def search_in_collection(query, category_key):
-    """Belirli bir collection'da ara"""
-    try:
-        info = COLLECTION_MAP[category_key]
-        collection = client.collections.get(info["collection"])
-        
-        response = collection.query.hybrid(
-            query=query,
-            limit=4,
-            alpha=0.5
-        )
-        
-        results = []
-        for obj in response.objects:
-            results.append({
-                "content": obj.properties['content'],
-                "filename": obj.properties['filename'],
-                "page": obj.properties['page_number'],
-                "category": info["name"],
-                "emoji": info["emoji"]
-            })
-        
-        return results
-        
-    except Exception as e:
-        st.error(f"❌ Arama hatası ({COLLECTION_MAP[category_key]['name']}): {e}")
+        collection = client.collections.get(collection_name)
+        response = collection.query.hybrid(query=query, limit=limit, alpha=0.5)
+        return response.objects
+    except:
         return []
 
-def search_in_all_collections(query):
-    """Tüm collection'larda ara (fallback)"""
-    all_results = []
+def search_parallel(query, category_keys):
+    """Paralel arama (daha hızlı)"""
+    results = []
     
-    for category_key, info in COLLECTION_MAP.items():
-        try:
-            collection = client.collections.get(info["collection"])
-            response = collection.query.hybrid(
-                query=query,
-                limit=2,  # Her collection'dan daha az
-                alpha=0.5
+    with ThreadPoolExecutor(max_workers=len(category_keys)) as executor:
+        futures = {}
+        
+        for key in category_keys:
+            info = COLLECTION_MAP[key]
+            future = executor.submit(
+                search_single_collection, 
+                info["collection"], 
+                query, 
+                4 if len(category_keys) == 1 else 2
             )
+            futures[future] = key
+        
+        for future in futures:
+            key = futures[future]
+            info = COLLECTION_MAP[key]
+            objects = future.result()
             
-            for obj in response.objects:
-                all_results.append({
+            for obj in objects:
+                results.append({
                     "content": obj.properties['content'],
                     "filename": obj.properties['filename'],
                     "page": obj.properties['page_number'],
                     "category": info["name"],
+                    "category_key": key,
                     "emoji": info["emoji"]
                 })
-                
-        except Exception as e:
-            st.warning(f"⚠️ {info['name']} collection'ında arama yapılamadı")
     
-    return all_results
+    return results
+
+# --- TEK LLM ÇAĞRISI İLE ROUTİNG + CEVAP ---
+def get_answer_with_smart_routing(query, all_results, history):
+    """Tek LLM çağrısında hem kategori tespit hem cevap"""
+    
+    # Tüm kategorilerden context hazırla
+    contexts_by_category = {}
+    for result in all_results:
+        cat_key = result["category_key"]
+        if cat_key not in contexts_by_category:
+            contexts_by_category[cat_key] = []
+        contexts_by_category[cat_key].append(result)
+    
+    # Her kategoriden context oluştur
+    full_context = ""
+    for cat_key, results in contexts_by_category.items():
+        info = COLLECTION_MAP[cat_key]
+        full_context += f"\n\n=== {info['emoji']} {info['name'].upper()} KATEGORİSİ ===\n"
+        for r in results[:2]:  # Her kategoriden max 2 belge
+            full_context += f"[KAYNAK: {r['filename']} S.{r['page']}]\n{r['content'][:600]}...\n\n"
+    
+    # Sistem prompt'u (tek seferde hem routing hem cevap)
+    system_instruction = f"""Sen kıdemli bir hukuk müşavirisin. 
+
+GÖREVİN 2 AŞAMALI:
+
+1. ADIM - KATEGORİ TESPİTİ:
+Kullanıcının sorusunu analiz et ve hangi kategoriye ait olduğunu belirle.
+Mevcut kategoriler: {', '.join([f"{info['emoji']} {key}" for key, info in COLLECTION_MAP.items()])}
+
+2. ADIM - CEVAP OLUŞTURMA:
+Belirlediğin kategorideki belgelerden yararlanarak soruyu yanıtla.
+
+KURALLAR:
+- Cevabın robotik olmasın, avukat gibi akıcı anlat
+- Önemli kısımları **kalın** yaz
+- Spesifik madde/kural varsa belirt
+- Cevabın sonunda kaynaklara atıf yap
+- Belirlediğin kategoriyi cevabında belirtme (otomatik gösteriyoruz)
+
+ÇOK ÖNEMLİ: Soruya en uygun kategorideki belgeleri kullan. Diğer kategorilerdeki belgeleri görmezden gel."""
+
+    # Chat history
+    messages = [{"role": "system", "content": system_instruction}]
+    for m in history[-2:]:  # Son 2 mesaj
+        if m["role"] != "system":
+            messages.append({"role": m["role"], "content": m["content"]})
+    
+    messages.append({
+        "role": "user", 
+        "content": f"{full_context}\n\nSORU: {query}"
+    })
+    
+    # TEK LLM ÇAĞRISI
+    return ai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        temperature=0.4,
+        stream=True
+    )
 
 # --- CHAT ARAYÜZÜ ---
 if "messages" not in st.session_state:
@@ -254,93 +259,59 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("🧠 Soru analiz ediliyor..."):
+        # ==================== 1. HIZLI ROUTİNG (Keyword) ====================
+        detected_category = classify_query_fast(prompt)
+        
+        if detected_category:
+            categories_to_search = [detected_category]
+            info = COLLECTION_MAP[detected_category]
+            category_info_html = f'<div class="category-badge">⚡ {info["emoji"]} {info["name"]}</div>'
+        else:
+            # Keyword bulamazsa tüm kategorilerde ara
+            categories_to_search = list(COLLECTION_MAP.keys())
+            category_info_html = '<div class="category-badge">📚 Tüm Kategoriler</div>'
+        
+        st.markdown(category_info_html, unsafe_allow_html=True)
+        
+        # ==================== 2. PARALEL ARAMA ====================
+        with st.spinner("📚 Belgeler taranıyor..."):
+            all_results = search_parallel(prompt, categories_to_search)
+        
+        if not all_results:
+            response_text = "Üzgünüm, bu konuyla ilgili belge bulunamadı."
+            st.warning(response_text)
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": response_text,
+                "category_info": category_info_html
+            })
+            st.stop()
+        
+        # ==================== 3. TEK LLM ÇAĞRISI (Routing + Cevap) ====================
+        with st.spinner("✍️ Yanıt hazırlanıyor..."):
+            ai_response = get_answer_with_smart_routing(
+                prompt, 
+                all_results, 
+                st.session_state.messages
+            )
             
-            # 1. KATEGORİ TESPİTİ (LLM İLE)
-            detected_category = None
-            category_info_html = ""
+            # Streaming yanıt
+            response_placeholder = st.empty()
+            full_response = ""
             
-            if manual_mode and selected_category != "Otomatik":
-                # Manuel seçim
-                for key, info in COLLECTION_MAP.items():
-                    if info["name"] == selected_category:
-                        detected_category = key
-                        category_info_html = f'<div class="category-badge">{info["emoji"]} {info["name"]} (Manuel)</div>'
-                        break
-            else:
-                # LLM ile otomatik tespit
-                with st.spinner("🎯 Kategori tespit ediliyor..."):
-                    detected_category = classify_query_with_llm(prompt)
-                    
-                    if detected_category:
-                        info = COLLECTION_MAP[detected_category]
-                        category_info_html = f'<div class="category-badge">🎯 {info["emoji"]} {info["name"]} (AI Tespit)</div>'
-                        st.markdown(category_info_html, unsafe_allow_html=True)
-                    else:
-                        st.info("ℹ️ Kategori belirlenemedi, tüm kategorilerde arama yapılıyor...")
+            for chunk in ai_response:
+                if chunk.choices[0].delta.content:
+                    full_response += chunk.choices[0].delta.content
+                    response_placeholder.markdown(full_response + "▌")
             
-            # 2. ARAMA YAP
-            with st.spinner("📚 Belgeler taranıyor..."):
-                if detected_category:
-                    # Belirli kategoride ara
-                    results = search_in_collection(prompt, detected_category)
-                    searched_in = COLLECTION_MAP[detected_category]["name"]
-                else:
-                    # Tüm kategorilerde ara
-                    results = search_in_all_collections(prompt)
-                    searched_in = "Tüm Kategoriler"
+            response_placeholder.markdown(full_response)
             
-            if not results:
-                response_text = f"Üzgünüm, **{searched_in}** kategorisinde bu konuyla ilgili belge bulunamadı. Lütfen sorunuzu farklı kelimelerle ifade etmeyi deneyin."
-                st.warning(response_text)
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": response_text,
-                    "category_info": category_info_html
-                })
-                st.stop()
+            # Referansları göster (kullanılan kategorideki belgeler)
+            used_results = [r for r in all_results if r["category_key"] == detected_category] if detected_category else all_results[:4]
             
-            # 3. CONTEXT OLUŞTUR
-            context = ""
-            sources = []
-            for result in results:
-                source_info = f"{result['emoji']} {result['filename']} (S. {result['page']}) - {result['category']}"
-                sources.append(source_info)
-                context += f"\n[KAYNAK: {source_info}]\n{result['content']}\n"
-
-            # 4. AI YANIT OLUŞTUR
-            with st.spinner("✍️ Cevap hazırlanıyor..."):
-                system_instruction = """Sen kıdemli bir hukuk müşavirisin. 
-                Görevin, aşağıdaki döküman parçalarını kullanarak kullanıcının sorusuna net, profesyonel ve yardımcı bir cevap oluşturmaktır.
-                
-                KURALLAR:
-                1. Cevapların 'robotik' olmasın. Bir avukat gibi akıcı ve mantıklı bir kurguyla anlat.
-                2. Eğer dökümanlarda cevap varsa, genel konuşma; spesifik madde veya kuralları belirt.
-                3. Dökümanlarda bilgi yoksa 'Veritabanımda bu konuda net bir bilgi bulunmuyor' de.
-                4. Cevabını verirken önemli kısımları kalın harflerle belirt.
-                5. Cevabın sonunda varsa mutlaka ilgili kanun maddesine veya dokümana atıf yap."""
-
-                history = st.session_state.messages[-3:]
-                
-                messages = [{"role": "system", "content": system_instruction}]
-                for m in history:
-                    if m["role"] != "system":
-                        messages.append({"role": m["role"], "content": m["content"]})
-                
-                messages.append({"role": "user", "content": f"Bağlam Dökümanları:\n{context}\n\nSoru: {prompt}"})
-                
-                ai_response = ai_client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=messages,
-                    temperature=0.4
-                )
-                
-                full_response = ai_response.choices[0].message.content
-                st.markdown(full_response)
-                
-                with st.expander("📍 Kullanılan Referanslar"):
-                    for s in sources:
-                        st.write(f"- {s}")
+            with st.expander("📍 Kullanılan Referanslar"):
+                for r in used_results:
+                    st.write(f"- {r['emoji']} {r['filename']} (S. {r['page']}) - {r['category']}")
 
         st.session_state.messages.append({
             "role": "assistant", 
