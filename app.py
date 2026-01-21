@@ -14,12 +14,12 @@ st.markdown("""
     <style>
         /* Ana arka plan - MOD'a göre değişir */
         .stApp {
-            background-color: #f8f9fa;
+            background-color: #e8e8e8;
         }
         
         /* Yargıtay Modu - Açık Gri */
         .stApp.yargitay-mode {
-            background: linear-gradient(135deg, #e8eaf0 0%, #d4d7e0 100%) !important;
+            background: linear-gradient(135deg, #e8eaf0 10%, #d4d7e0 100%) !important;
         }
         
         /* Danıştay Modu - Açık Bej */
@@ -537,3 +537,4 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
             "content": full_response,
             "category_info": category_info_html
         })
+
