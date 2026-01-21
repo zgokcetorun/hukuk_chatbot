@@ -19,7 +19,7 @@ st.markdown("""
         
         /* Yargıtay Modu - KOYU GRİ */
         .stApp.yargitay-mode {
-            background: linear-gradient(135deg, #c0c4d0 0%, #a8adb8 100%) !important;
+            background: linear-gradient(135deg, #3a3f4c 0%, #2a2f38 100%) !important;
         }
         
         /* Danıştay Modu - KOYU BEJ */
@@ -537,3 +537,4 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
             "content": full_response,
             "category_info": category_info_html
         })
+
