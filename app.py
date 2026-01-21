@@ -120,7 +120,31 @@ with st.sidebar:
         st.markdown(f"{info['emoji']} **{info['name']}**")
     
     st.divider()
-    st.caption("Versiyon: 3.1 (Auto Law Links)")
+    
+    # İçtihat Araması Butonları
+    st.markdown("#### ⚖️ İçtihat Araması")
+    
+    yargitay_button = st.button(
+        "⚖️ Yargıtay Kararlarında Ara",
+        use_container_width=True,
+        help="Yargıtay kararlarında ara"
+    )
+    
+    danistay_button = st.button(
+        "🏛️ Danıştay Kararlarında Ara",
+        use_container_width=True,
+        help="Danıştay kararlarında ara"
+    )
+    
+    # Buton durumu göstergesi
+    if yargitay_button:
+        st.info("🔍 Yargıtay kararlarında aranacak (Yakında aktif)")
+    
+    if danistay_button:
+        st.info("🔍 Danıştay kararlarında aranacak (Yakında aktif)")
+    
+    st.divider()
+    st.caption("Versiyon: 3.2 (İçtihat Butonları - UI)")
 
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
