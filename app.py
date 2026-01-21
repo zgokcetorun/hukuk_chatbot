@@ -52,32 +52,33 @@ st.markdown("""
             color: white;
         }
         
-        /* Sidebar butonları - ÇOK BELİRGİN PARLAK RENKLER */
+        /* Sidebar butonları - PROFESYONEL GRİ */
         [data-testid="stSidebar"] button {
-            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%) !important;
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%) !important;
             color: white !important;
-            border: 4px solid #FFFFFF !important;
-            border-radius: 12px !important;
-            font-weight: 900 !important;
-            font-size: 17px !important;
-            padding: 18px 10px !important;
-            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4) !important;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
-            transition: all 0.3s ease !important;
+            border: 2px solid #718096 !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            padding: 10px 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+            transition: all 0.2s ease !important;
         }
         
         [data-testid="stSidebar"] button:hover {
-            background: linear-gradient(135deg, #00D4FF 0%, #0099FF 100%) !important;
+            background: linear-gradient(135deg, #718096 0%, #4a5568 100%) !important;
             color: white !important;
-            border: 4px solid #00D4FF !important;
-            transform: scale(1.08) !important;
-            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.6) !important;
+            border: 2px solid #a0aec0 !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
         }
         
         /* Normal Moda Dön butonu için özel stil */
         [data-testid="stSidebar"] button[kind="primary"] {
-            background: #dc3545 !important;
-            border: 2px solid white !important;
+            background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%) !important;
+            border: 2px solid #fc8181 !important;
+            font-size: 13px !important;
+            padding: 8px 10px !important;
         }
 
         /* Expander (Referanslar) */
