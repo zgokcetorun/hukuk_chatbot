@@ -69,6 +69,23 @@ st.markdown("""
             background-color: #002366;
             color: white;
         }
+        
+        /* Kanun maddeleri vurgusu */
+        .stMarkdown hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 2px solid #002366;
+        }
+        
+        .stMarkdown strong {
+            color: #002366;
+        }
+        
+        /* Kanun maddeleri emoji'si */
+        .stMarkdown h2:has(+ ul) {
+            color: #002366;
+            font-size: 1.1em;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -218,9 +235,23 @@ Belirlediğin kategorideki belgelerden yararlanarak soruyu yanıtla.
 KURALLAR:
 - Cevabın robotik olmasın, avukat gibi akıcı anlat
 - Önemli kısımları **kalın** yaz
-- Spesifik madde/kural varsa belirt
-- Cevabın sonunda kaynaklara atıf yap
+- Açıklama içinde kanun maddelerine atıfta bulun (örn: "TBK Madde 299'a göre...")
 - Belirlediğin kategoriyi cevabında belirtme (otomatik gösteriyoruz)
+
+ÇOK ÖNEMLİ FORMAT:
+Cevabını şu şekilde yapılandır:
+
+[Ana açıklama burada - akıcı bir şekilde, kanun maddelerine atıflar yaparak]
+
+Örneğin: "Kiracı olarak **TBK Madde 299**'da belirtilen haklara sahipsiniz. Bu maddeye göre..."
+
+---
+
+**📜 İlgili Kanun Maddeleri:**
+- [SADECE yukarıdaki açıklamada bahsettiğin maddeleri buraya tekrar listele]
+- [YENİ madde ekleme, sadece yukarıda kullandıklarını yaz]
+- [Her maddeyi ayrı satırda yaz, örn: "Türk Borçlar Kanunu Madde 299"]
+- [Eğer hiç kanun maddesi kullanmadıysan bu bölümü boş bırak]
 
 ÇOK ÖNEMLİ: Soruya en uygun kategorideki belgeleri kullan. Diğer kategorilerdeki belgeleri görmezden gel."""
 
@@ -312,6 +343,39 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
             with st.expander("📍 Kullanılan Referanslar"):
                 for r in used_results:
                     st.write(f"- {r['emoji']} {r['filename']} (S. {r['page']}) - {r['category']}")
+            
+            # Kanun maddesi linklerini ekle
+            with st.expander("🔗 Kanun Maddeleri - Tam Metin Linkler"):
+                st.markdown("""
+                **Sık Kullanılan Kanunlar:**
+                
+                📖 **Türk Borçlar Kanunu (TBK) - 6098 Sayılı:**
+                - [📄 TBK Tam Metin Oku (mevzuat.gov.tr)](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=6098&MevzuatTur=1&MevzuatTertip=5)
+                - [⬇️ TBK PDF İndir](https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=6098&mevzuatTur=KanunHukmu&mevzuatTertip=5)
+                
+                💼 **İş Kanunu - 4857 Sayılı:**
+                - [📄 İş Kanunu Tam Metin Oku (mevzuat.gov.tr)](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=4857&MevzuatTur=1&MevzuatTertip=5)
+                - [⬇️ İş Kanunu PDF İndir](https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=4857&mevzuatTur=KanunHukmu&mevzuatTertip=5)
+                
+                👨‍👩‍👧 **Medeni Kanun - 4721 Sayılı:**
+                - [📄 Medeni Kanun Tam Metin Oku](https://www.mevzuat.gov.tr/mevzat?MevzuatNo=4721&MevzuatTur=1&MevzuatTertip=5)
+                
+                ⚖️ **Hukuk Muhakemeleri Kanunu (HMK) - 6100 Sayılı:**
+                - [📄 HMK Tam Metin Oku](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=6100&MevzuatTur=1&MevzuatTertip=5)
+                
+                🏛️ **Diğer Kaynaklar:**
+                - [🔍 E-Mevzuat Ana Sayfa (Tüm Kanunlar)](https://www.mevzuat.gov.tr/)
+                - [⚖️ Yargıtay Kararları Arama](https://www.legalbank.net/yargitay-kararlari/)
+                - [📚 Resmi Gazete Arşivi](https://www.resmigazete.gov.tr/)
+                
+                ---
+                
+                💡 **Kullanım İpucu:**
+                1. Yukarıdaki linklerden ilgili kanunu açın
+                2. Açılan sayfada **Ctrl+F** (veya Cmd+F) yapın
+                3. Yanıtta bahsedilen madde numarasını arayın (örn: "Madde 299")
+                4. Maddenin tam metnini okuyun
+                """)
 
         st.session_state.messages.append({
             "role": "assistant", 
