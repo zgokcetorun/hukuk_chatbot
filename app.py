@@ -51,6 +51,24 @@ st.markdown("""
             background-color: #4a4a4a; /* Gray on hover */
             color: white;
         }
+        
+        /* İçtihat butonları - daha belirgin */
+        [data-testid="stSidebar"] .stButton>button {
+            background-color: transparent;
+            color: white;
+            border: 3px solid white;
+            border-radius: 8px;
+            font-weight: bold;
+            padding: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        [data-testid="stSidebar"] .stButton>button:hover {
+            background-color: white;
+            color: #002366;
+            border: 3px solid white;
+            transform: scale(1.02);
+        }
 
         /* Expander (Referanslar) */
         .streamlit-expanderHeader {
