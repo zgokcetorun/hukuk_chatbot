@@ -12,9 +12,19 @@ st.set_page_config(page_title="Hukuk Asistanı", page_icon="⚖️", layout="wid
 # --- CUSTOM CSS (Lacivert & Gray Theme) ---
 st.markdown("""
     <style>
-        /* Ana arka plan */
+        /* Ana arka plan - MOD'a göre değişir */
         .stApp {
             background-color: #f8f9fa;
+        }
+        
+        /* Yargıtay Modu - Açık Gri */
+        .stApp.yargitay-mode {
+            background: linear-gradient(135deg, #e8eaf0 0%, #d4d7e0 100%) !important;
+        }
+        
+        /* Danıştay Modu - Açık Bej */
+        .stApp.danistay-mode {
+            background: linear-gradient(135deg, #f0ebe8 0%, #e0dad4 100%) !important;
         }
         
         /* Başlık stili */
@@ -188,15 +198,41 @@ if danistay_button:
 
 # Aktif modu göster
 if st.session_state.search_mode == "yargitay":
-    st.info("🔍 **Yargıtay Modu Aktif** - Sorularınız Yargıtay kararlarında aranacak")
-    if st.button("❌ Normal Moda Dön"):
+    # Arka plan rengini değiştir
+    st.markdown("""
+    <script>
+        document.querySelector('.stApp').classList.add('yargitay-mode');
+        document.querySelector('.stApp').classList.remove('danistay-mode');
+    </script>
+    """, unsafe_allow_html=True)
+    
+    st.success("⚖️ **Yargıtay Modu Aktif** - Sorularınız Yargıtay kararlarında aranacak")
+    if st.button("❌ Normal Moda Dön", type="primary"):
         st.session_state.search_mode = "normal"
         st.rerun()
+        
 elif st.session_state.search_mode == "danistay":
-    st.info("🔍 **Danıştay Modu Aktif** - Sorularınız Danıştay kararlarında aranacak")
-    if st.button("❌ Normal Moda Dön"):
+    # Arka plan rengini değiştir
+    st.markdown("""
+    <script>
+        document.querySelector('.stApp').classList.add('danistay-mode');
+        document.querySelector('.stApp').classList.remove('yargitay-mode');
+    </script>
+    """, unsafe_allow_html=True)
+    
+    st.success("🏛️ **Danıştay Modu Aktif** - Sorularınız Danıştay kararlarında aranacak")
+    if st.button("❌ Normal Moda Dön", type="primary"):
         st.session_state.search_mode = "normal"
         st.rerun()
+        
+else:
+    # Normal mod - class'ları temizle
+    st.markdown("""
+    <script>
+        document.querySelector('.stApp').classList.remove('yargitay-mode');
+        document.querySelector('.stApp').classList.remove('danistay-mode');
+    </script>
+    """, unsafe_allow_html=True)
 
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
