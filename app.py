@@ -39,7 +39,7 @@ st.markdown("""
             color: white !important;
         }
 
-        /* Butonlar */
+        /* Ana sayfa butonları (normal) */
         .stButton>button {
             background-color: #002366;
             color: white;
@@ -48,26 +48,28 @@ st.markdown("""
         }
         
         .stButton>button:hover {
-            background-color: #4a4a4a; /* Gray on hover */
+            background-color: #4a4a4a;
             color: white;
         }
         
-        /* İçtihat butonları - daha belirgin */
-        [data-testid="stSidebar"] .stButton>button {
-            background-color: transparent;
-            color: white;
-            border: 3px solid white;
-            border-radius: 8px;
-            font-weight: bold;
-            padding: 12px;
-            transition: all 0.3s ease;
+        /* Sidebar butonları - ÇOK BELİRGİN */
+        div[data-testid="stSidebar"] button[kind="secondary"] {
+            background-color: white !important;
+            color: #002366 !important;
+            border: 4px solid white !important;
+            border-radius: 10px !important;
+            font-weight: 900 !important;
+            font-size: 16px !important;
+            padding: 15px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
         }
         
-        [data-testid="stSidebar"] .stButton>button:hover {
-            background-color: white;
-            color: #002366;
-            border: 3px solid white;
-            transform: scale(1.02);
+        div[data-testid="stSidebar"] button[kind="secondary"]:hover {
+            background-color: #FFD700 !important;
+            color: #002366 !important;
+            border: 4px solid #FFD700 !important;
+            transform: scale(1.05) !important;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4) !important;
         }
 
         /* Expander (Referanslar) */
@@ -144,25 +146,48 @@ with st.sidebar:
     
     yargitay_button = st.button(
         "⚖️ Yargıtay Kararlarında Ara",
+        key="yargitay_btn",
+        type="secondary",
         use_container_width=True,
         help="Yargıtay kararlarında ara"
     )
     
     danistay_button = st.button(
         "🏛️ Danıştay Kararlarında Ara",
+        key="danistay_btn",
+        type="secondary",
         use_container_width=True,
         help="Danıştay kararlarında ara"
     )
     
-    # Buton durumu göstergesi
-    if yargitay_button:
-        st.info("🔍 Yargıtay kararlarında aranacak (Yakında aktif)")
-    
-    if danistay_button:
-        st.info("🔍 Danıştay kararlarında aranacak (Yakında aktif)")
-    
     st.divider()
-    st.caption("Versiyon: 3.2 (İçtihat Butonları - UI)")
+    st.caption("Versiyon: 3.3 (İçtihat Modu)")
+
+# --- İÇTİHAT MODU KONTROLÜ ---
+# Session state'e mod bilgisi ekle
+if "search_mode" not in st.session_state:
+    st.session_state.search_mode = "normal"  # normal, yargitay, danistay
+
+# Butonlara basılınca modu değiştir
+if yargitay_button:
+    st.session_state.search_mode = "yargitay"
+    st.rerun()
+
+if danistay_button:
+    st.session_state.search_mode = "danistay"
+    st.rerun()
+
+# Aktif modu göster
+if st.session_state.search_mode == "yargitay":
+    st.info("🔍 **Yargıtay Modu Aktif** - Sorularınız Yargıtay kararlarında aranacak")
+    if st.button("❌ Normal Moda Dön"):
+        st.session_state.search_mode = "normal"
+        st.rerun()
+elif st.session_state.search_mode == "danistay":
+    st.info("🔍 **Danıştay Modu Aktif** - Sorularınız Danıştay kararlarında aranacak")
+    if st.button("❌ Normal Moda Dön"):
+        st.session_state.search_mode = "normal"
+        st.rerun()
 
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
