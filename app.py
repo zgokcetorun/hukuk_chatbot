@@ -53,24 +53,31 @@ st.markdown("""
         }
         
         /* Sidebar butonları - ÇOK BELİRGİN PARLAK RENKLER */
-        div[data-testid="stSidebar"] button[kind="secondary"] {
+        [data-testid="stSidebar"] button {
             background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%) !important;
             color: white !important;
             border: 4px solid #FFFFFF !important;
             border-radius: 12px !important;
             font-weight: 900 !important;
             font-size: 17px !important;
-            padding: 18px !important;
+            padding: 18px 10px !important;
             box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4) !important;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
+            transition: all 0.3s ease !important;
         }
         
-        div[data-testid="stSidebar"] button[kind="secondary"]:hover {
+        [data-testid="stSidebar"] button:hover {
             background: linear-gradient(135deg, #00D4FF 0%, #0099FF 100%) !important;
             color: white !important;
             border: 4px solid #00D4FF !important;
             transform: scale(1.08) !important;
             box-shadow: 0 8px 25px rgba(0, 212, 255, 0.6) !important;
+        }
+        
+        /* Normal Moda Dön butonu için özel stil */
+        [data-testid="stSidebar"] button[kind="primary"] {
+            background: #dc3545 !important;
+            border: 2px solid white !important;
         }
 
         /* Expander (Referanslar) */
