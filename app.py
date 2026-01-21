@@ -4,6 +4,7 @@ import weaviate.classes as wvc
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor
 import json
+import re
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Hukuk Asistanı", page_icon="⚖️", layout="wide")
@@ -119,7 +120,7 @@ with st.sidebar:
         st.markdown(f"{info['emoji']} **{info['name']}**")
     
     st.divider()
-    st.caption("Versiyon: 3.0 (Ultra Fast - Single LLM)")
+    st.caption("Versiyon: 3.1 (Auto Law Links)")
 
 st.title("⚖️ Profesyonel Hukuk Danışmanı")
 
@@ -139,6 +140,62 @@ def get_weaviate_client():
     )
 
 client = get_weaviate_client()
+
+# --- KANUN LİNKLERİ OTOMATİK TESPİT ---
+def extract_law_links(response_text):
+    """Cevaptaki kanun maddelerini tespit et ve link oluştur"""
+    
+    # Kanun veritabanı
+    law_database = {
+        "tbk": {
+            "patterns": [r"tbk", r"türk borçlar kanunu", r"borçlar kanunu", r"6098"],
+            "name": "Türk Borçlar Kanunu (TBK - 6098 Sayılı)",
+            "url": "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=6098&MevzuatTur=1&MevzuatTertip=5",
+            "pdf": "https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=6098&mevzuatTur=KanunHukmu&mevzuatTertip=5"
+        },
+        "is_kanunu": {
+            "patterns": [r"iş kanunu", r"4857"],
+            "name": "İş Kanunu (4857 Sayılı)",
+            "url": "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=4857&MevzuatTur=1&MevzuatTertip=5",
+            "pdf": "https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=4857&mevzuatTur=KanunHukmu&mevzuatTertip=5"
+        },
+        "medeni": {
+            "patterns": [r"medeni kanun", r"tmk", r"4721"],
+            "name": "Türk Medeni Kanunu (4721 Sayılı)",
+            "url": "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=4721&MevzuatTur=1&MevzuatTertip=5",
+            "pdf": "https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=4721&mevzuatTur=KanunHukmu&mevzuatTertip=5"
+        },
+        "hmk": {
+            "patterns": [r"hmk", r"hukuk muhakemeleri", r"6100"],
+            "name": "Hukuk Muhakemeleri Kanunu (6100 Sayılı)",
+            "url": "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=6100&MevzuatTur=1&MevzuatTertip=5",
+            "pdf": "https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=6100&mevzuatTur=KanunHukmu&mevzuatTertip=5"
+        },
+        "tck": {
+            "patterns": [r"tck", r"ceza kanunu", r"türk ceza kanunu", r"5237"],
+            "name": "Türk Ceza Kanunu (5237 Sayılı)",
+            "url": "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=5237&MevzuatTur=1&MevzuatTertip=5",
+            "pdf": "https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=5237&mevzuatTur=KanunHukmu&mevzuatTertip=5"
+        }
+    }
+    
+    found_laws = []
+    text_lower = response_text.lower()
+    
+    # Her kanunu kontrol et
+    for law_key, law_info in law_database.items():
+        for pattern in law_info["patterns"]:
+            if re.search(pattern, text_lower):
+                if law_key not in [l["key"] for l in found_laws]:
+                    found_laws.append({
+                        "key": law_key,
+                        "name": law_info["name"],
+                        "url": law_info["url"],
+                        "pdf": law_info["pdf"]
+                    })
+                break
+    
+    return found_laws
 
 # --- HIZLI KEYWORD ROUTİNG ---
 def classify_query_fast(query):
@@ -337,45 +394,31 @@ if prompt := st.chat_input("Sorunuzu buraya yazın..."):
             
             response_placeholder.markdown(full_response)
             
-            # Referansları göster (kullanılan kategorideki belgeler)
+            # Referansları göster
             used_results = [r for r in all_results if r["category_key"] == detected_category] if detected_category else all_results[:4]
             
             with st.expander("📍 Kullanılan Referanslar"):
                 for r in used_results:
                     st.write(f"- {r['emoji']} {r['filename']} (S. {r['page']}) - {r['category']}")
             
-            # Kanun maddesi linklerini ekle
-            with st.expander("🔗 Kanun Maddeleri - Tam Metin Linkler"):
-                st.markdown("""
-                **Sık Kullanılan Kanunlar:**
-                
-                📖 **Türk Borçlar Kanunu (TBK) - 6098 Sayılı:**
-                - [📄 TBK Tam Metin Oku (mevzuat.gov.tr)](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=6098&MevzuatTur=1&MevzuatTertip=5)
-                - [⬇️ TBK PDF İndir](https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=6098&mevzuatTur=KanunHukmu&mevzuatTertip=5)
-                
-                💼 **İş Kanunu - 4857 Sayılı:**
-                - [📄 İş Kanunu Tam Metin Oku (mevzuat.gov.tr)](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=4857&MevzuatTur=1&MevzuatTertip=5)
-                - [⬇️ İş Kanunu PDF İndir](https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo=4857&mevzuatTur=KanunHukmu&mevzuatTertip=5)
-                
-                👨‍👩‍👧 **Medeni Kanun - 4721 Sayılı:**
-                - [📄 Medeni Kanun Tam Metin Oku](https://www.mevzuat.gov.tr/mevzat?MevzuatNo=4721&MevzuatTur=1&MevzuatTertip=5)
-                
-                ⚖️ **Hukuk Muhakemeleri Kanunu (HMK) - 6100 Sayılı:**
-                - [📄 HMK Tam Metin Oku](https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=6100&MevzuatTur=1&MevzuatTertip=5)
-                
-                🏛️ **Diğer Kaynaklar:**
-                - [🔍 E-Mevzuat Ana Sayfa (Tüm Kanunlar)](https://www.mevzuat.gov.tr/)
-                - [⚖️ Yargıtay Kararları Arama](https://www.legalbank.net/yargitay-kararlari/)
-                - [📚 Resmi Gazete Arşivi](https://www.resmigazete.gov.tr/)
-                
-                ---
-                
-                💡 **Kullanım İpucu:**
-                1. Yukarıdaki linklerden ilgili kanunu açın
-                2. Açılan sayfada **Ctrl+F** (veya Cmd+F) yapın
-                3. Yanıtta bahsedilen madde numarasını arayın (örn: "Madde 299")
-                4. Maddenin tam metnini okuyun
-                """)
+            # OTOMATİK KANUN LİNKİ TESPİTİ
+            law_links = extract_law_links(full_response)
+            
+            if law_links:
+                with st.expander("🔗 Bahsedilen Kanunlar - Tam Metin"):
+                    st.markdown("**Yanıtta bahsedilen kanunların tam metinleri:**")
+                    st.markdown("")
+                    
+                    for law in law_links:
+                        st.markdown(f"📖 **{law['name']}**")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"[📄 Tam Metin Oku (mevzuat.gov.tr)]({law['url']})")
+                        with col2:
+                            st.markdown(f"[⬇️ PDF İndir]({law['pdf']})")
+                        st.markdown("---")
+                    
+                    st.info("💡 **İpucu:** Linke tıkladıktan sonra sayfada Ctrl+F (veya Cmd+F) yaparak bahsedilen madde numarasını arayabilirsiniz.")
 
         st.session_state.messages.append({
             "role": "assistant", 
